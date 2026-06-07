@@ -1,0 +1,12 @@
+Data/
+__pycache__/
+*.pkl
+*.parquet
+*.graphml
+node_modules/
+.ipynb_checkpoints/
+*.csv
+*.json
+notebooks/
+src/
+*.ipynb
