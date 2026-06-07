@@ -25,7 +25,8 @@ app.add_middleware(
 # ── Constants ──────────────────────────────────────────
 LAT_MIN, LON_MIN = 41.64, -87.94
 GRID_SIZE = 0.005
-DATA_DIR  = "../Data"
+import os
+DATA_DIR = os.path.join(os.path.dirname(__file__), "../Data") if os.path.exists(os.path.join(os.path.dirname(__file__), "../Data")) else "Data"
 
 # ── Load everything on startup ─────────────────────────
 print("Loading data...")
