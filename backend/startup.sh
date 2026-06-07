@@ -15,5 +15,5 @@ if not os.path.exists('Data'):
 else:
     print('Data already exists, skipping download.')
 "
-echo "Starting API..."
-uvicorn main:app --host 0.0.0.0 --port $PORT
+echo "Starting API on port $PORT..."
+exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
