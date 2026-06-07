@@ -13,7 +13,6 @@ warnings.filterwarnings('ignore')
 
 app = FastAPI(title="SafeCity Chicago API")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,27 +24,15 @@ app.add_middleware(
 # ── Constants ──────────────────────────────────────────
 LAT_MIN, LON_MIN = 41.64, -87.94
 GRID_SIZE = 0.005
-import os
-DATA_DIR = os.path.join(os.path.dirname(__file__), "../Data") if os.path.exists(os.path.join(os.path.dirname(__file__), "../Data")) else "Data"
+DATA_DIR  = "Data" if os.path.exists("Data") else "../Data"
 
-# ── Load everything on startup ─────────────────────────
+# ── Load only essential data on startup ────────────────
 print("Loading data...")
-
 risk_df  = pd.read_csv(f"{DATA_DIR}/risk_scores.csv")
 neigh_df = pd.read_csv(f"{DATA_DIR}/neighbourhood_data.csv")
 
-with open(f"{DATA_DIR}/lgb_model.pkl", "rb") as f:
-    lgb_model = pickle.load(f)
-
 print("Loading road network...")
 G = ox.load_graphml(f"{DATA_DIR}/chicago_walk_network.graphml")
-
-print("Loading edge dangers...")
-edge_dangers = {}
-for hour in range(24):
-    path = f"{DATA_DIR}/edge_dangers/hour_{hour:02d}.pkl"
-    with open(path, "rb") as f:
-        edge_dangers[hour] = pickle.load(f)
 
 print("Loading hourly maps...")
 hourly_combined = {}
@@ -63,6 +50,10 @@ for category in ['violent','sexual','weapons','property','drugs']:
         if os.path.exists(path):
             with open(path) as f:
                 hourly_category[category][hour] = json.load(f)
+
+# Edge dangers loaded lazily per request
+edge_dangers = {}
+EDGE_DANGER_DIR = f"{DATA_DIR}/edge_dangers"
 
 geolocator = Nominatim(user_agent="safecity_chicago_v2")
 
@@ -91,9 +82,15 @@ def get_safety_score(lat, lon, hour):
 
 
 def build_weighted_graph_from_cache(hour, user_weights):
+    # Load edge danger for this hour only if not cached
+    if hour not in edge_dangers:
+        print(f"Loading edge dangers for hour {hour}...")
+        path = f"{EDGE_DANGER_DIR}/hour_{hour:02d}.pkl"
+        with open(path, "rb") as f:
+            edge_dangers[hour] = pickle.load(f)
+
     dangers = edge_dangers[hour]
     G_w = G.copy()
-    total = sum(user_weights.values()) or 1
 
     for u, v, k, data in G_w.edges(data=True, keys=True):
         length = data.get('length', 10)
@@ -174,13 +171,10 @@ def get_route(
         print("Finding nearest nodes...")
         s_node = ox.distance.nearest_nodes(G_w, s_lon, s_lat)
         e_node = ox.distance.nearest_nodes(G_w, e_lon, e_lat)
-        print(f"Start node: {s_node}, End node: {e_node}")
 
-        print("Computing safest path...")
-        safest_path = nx.shortest_path(G_w, s_node, e_node, weight='crime_weight')
-        print("Computing shortest path...")
+        print("Computing routes...")
+        safest_path   = nx.shortest_path(G_w, s_node, e_node, weight='crime_weight')
         shortest_path = nx.shortest_path(G_w, s_node, e_node, weight='length')
-        print(f"Safest path nodes: {len(safest_path)}, Shortest: {len(shortest_path)}")
 
         def path_to_coords(path):
             return [[G_w.nodes[n]['y'], G_w.nodes[n]['x']] for n in path]
@@ -199,10 +193,10 @@ def get_route(
             }
 
         result = {
-            "start":   {"lat": s_lat, "lon": s_lon},
-            "end":     {"lat": e_lat, "lon": e_lon},
-            "safest":  {"coords": path_to_coords(safest_path),  "stats": path_stats(safest_path)},
-            "shortest":{"coords": path_to_coords(shortest_path),"stats": path_stats(shortest_path)}
+            "start":    {"lat": s_lat, "lon": s_lon},
+            "end":      {"lat": e_lat, "lon": e_lon},
+            "safest":   {"coords": path_to_coords(safest_path),   "stats": path_stats(safest_path)},
+            "shortest": {"coords": path_to_coords(shortest_path), "stats": path_stats(shortest_path)}
         }
 
         print("Route computed successfully.")
