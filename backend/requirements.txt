@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pandas
+numpy
+scikit-learn
+lightgbm
+xgboost
+osmnx
+networkx
+geopy
+gdown
+python-multipart
+hdbscan
+pyarrow
